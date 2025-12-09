@@ -1,0 +1,142 @@
+#!/data/data/com.termux/files/usr/bin/bash
+#
+# TCC - Termux Coding CLI
+# Main entry point
+#
+
+TCC_HOME="$HOME/.tcc"
+TCC_VERSION="2.0.0"
+
+# Load config
+[[ -f "$TCC_HOME/config.sh" ]] && source "$TCC_HOME/config.sh"
+
+# Load modules
+[[ -f "$TCC_HOME/providers/detect.sh" ]] && source "$TCC_HOME/providers/detect.sh"
+[[ -f "$TCC_HOME/mcp/mcp-manager.sh" ]] && source "$TCC_HOME/mcp/mcp-manager.sh"
+[[ -f "$TCC_HOME/cua/cua-agent.sh" ]] && source "$TCC_HOME/cua/cua-agent.sh"
+
+show_help() {
+    echo "Termux-Coding-CLI v$TCC_VERSION"
+    echo ""
+    echo "Usage: tcc <command> [options]"
+    echo ""
+    echo "AI Commands:"
+    echo "  ai [chat] <prompt>      Use detected AI provider"
+    echo "  providers               List available AI providers"
+    echo ""
+    echo "MCP Commands:"
+    echo "  mcp <subcommand>        Manage MCP servers"
+    echo "  mcp list                List all MCP servers"
+    echo "  mcp start <name>        Start a server"
+    echo "  mcp add <name> <cmd>    Add new server"
+    echo "  mcp add-remote <n> <url>  Add remote server"
+    echo ""
+    echo "CUA Commands (Computer Use Agent):"
+    echo "  cua build [path]        Build project"
+    echo "  cua ship <target>       Ship/deploy project"
+    echo "  cua preview [port]      Start preview server"
+    echo "  cua browser <action>    Browser automation"
+    echo "  cua create <tpl> <name> Create new project"
+    echo ""
+    echo "VNC Commands:"
+    echo "  vnc start               Start VNC + WSS"
+    echo "  vnc stop                Stop VNC"
+    echo "  vnc status              Show status"
+    echo ""
+    echo "Other:"
+    echo "  plugin <cmd>            Manage plugins"
+    echo "  config                  Edit configuration"
+    echo "  update                  Update TCC"
+    echo "  help                    Show this help"
+}
+
+cmd_ai() {
+    detect_provider
+    if [[ -z "$TCC_ACTIVE_PROVIDER" ]]; then
+        echo "No AI provider detected. Set one of:"
+        echo "  ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY,"
+        echo "  OPENAI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY"
+        exit 1
+    fi
+    
+    echo "Using provider: $TCC_ACTIVE_PROVIDER"
+    
+    case "$TCC_ACTIVE_PROVIDER" in
+        claude)
+            if command -v claude &>/dev/null; then
+                claude "$@"
+            else
+                echo "Claude Code not installed. Run: npm i -g @anthropic-ai/claude-code"
+            fi
+            ;;
+        gemini)
+            source "$TCC_HOME/providers/gemini.sh"
+            gemini_chat "$@"
+            ;;
+        openai)
+            source "$TCC_HOME/providers/openai.sh"
+            openai_chat "$@"
+            ;;
+        deepseek)
+            source "$TCC_HOME/providers/deepseek.sh"
+            deepseek_chat "$@"
+            ;;
+        mistral)
+            source "$TCC_HOME/providers/mistral.sh"
+            mistral_chat "$@"
+            ;;
+    esac
+}
+
+cmd_vnc() {
+    source "$TCC_HOME/vnc/vnc-wss.sh"
+    case "$1" in
+        start) vnc_start ;;
+        stop) vnc_stop ;;
+        status) vnc_status ;;
+        *) echo "Usage: tcc vnc <start|stop|status>" ;;
+    esac
+}
+
+cmd_plugin() {
+    source "$TCC_HOME/plugins/manager.sh"
+    case "$1" in
+        list) plugin_list ;;
+        install) plugin_install "$2" ;;
+        remove) plugin_remove "$2" ;;
+        update) plugin_update ;;
+        *) echo "Usage: tcc plugin <list|install|remove|update> [name]" ;;
+    esac
+}
+
+cmd_providers() {
+    source "$TCC_HOME/providers/detect.sh"
+    list_providers
+}
+
+cmd_config() {
+    ${EDITOR:-nano} "$TCC_HOME/config.sh"
+}
+
+cmd_update() {
+    echo "Updating Termux-Coding-CLI..."
+    cd "$HOME/Termux-Coding-CLI" 2>/dev/null && git pull && bash install.sh || {
+        echo "Reinstalling from remote..."
+        curl -fsSL https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/install.sh | bash
+    }
+}
+
+# Main
+case "$1" in
+    ai) shift; cmd_ai "$@" ;;
+    mcp) shift; mcp_main "$@" ;;
+    cua) shift; cua_main "$@" ;;
+    vnc) shift; cmd_vnc "$@" ;;
+    plugin) shift; cmd_plugin "$@" ;;
+    providers) cmd_providers ;;
+    config) cmd_config ;;
+    update) cmd_update ;;
+    version|--version|-v) echo "TCC v$TCC_VERSION" ;;
+    help|--help|-h|"") show_help ;;
+    *) echo "Unknown command: $1"; show_help ;;
+esac

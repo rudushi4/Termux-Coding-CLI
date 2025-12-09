@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-filesystem", "/workspace"]
+    },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-github"],
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "fetch": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-fetch"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/mcp-memory"]
+    }
+  },
+  "remoteMcpServers": {},
+  "settings": {
+    "autoConnect": true,
+    "timeout": 30000,
+    "retries": 3
+  }
+}

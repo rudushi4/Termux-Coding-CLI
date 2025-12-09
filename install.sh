@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 #
-# Termux-Coding-CLI Installer
-# One-command setup for Claude Code + AI providers
+# Termux-Coding-CLI Installer v2.0
+# One-command setup with MCP + CUA support
 #
 
 set -e
@@ -11,20 +11,22 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m'
 
 TCC_HOME="$HOME/.tcc"
-TCC_VERSION="1.0.0"
+TCC_VERSION="2.0.0"
+REPO_URL="https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main"
 
 log() { echo -e "${GREEN}[TCC]${NC} $1"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; exit 1; }
 
 banner() {
-    echo -e "${BLUE}"
+    echo -e "${PURPLE}"
     echo "╔════════════════════════════════════════╗"
-    echo "║     Termux-Coding-CLI Installer        ║"
-    echo "║   Claude Code + AI Providers Setup     ║"
+    echo "║     Termux-Coding-CLI v$TCC_VERSION          ║"
+    echo "║   AI + MCP + CUA • Build Ship Preview  ║"
     echo "╚════════════════════════════════════════╝"
     echo -e "${NC}"
 }
@@ -32,18 +34,18 @@ banner() {
 # Check environment
 check_termux() {
     if [[ ! -d "/data/data/com.termux" ]]; then
-        error "This script must run in Termux"
+        warn "Not running in Termux - some features may not work"
     fi
 }
 
 # Update packages
 update_packages() {
     log "Updating package lists..."
-    pkg update -y
-    pkg upgrade -y
+    pkg update -y 2>/dev/null || apt-get update -y
+    pkg upgrade -y 2>/dev/null || apt-get upgrade -y
 }
 
-# Install core dependencies (~15MB)
+# Install core dependencies
 install_core() {
     log "Installing core packages..."
     pkg install -y \
@@ -53,163 +55,71 @@ install_core() {
         curl \
         wget \
         openssh \
-        jq
+        jq 2>/dev/null || {
+        apt-get install -y nodejs npm python3 git curl wget openssh-client jq
+    }
 }
 
-# Install VNC + WSS (~20MB)
+# Install VNC + WSS
 install_vnc() {
     log "Installing VNC with WSS support..."
     pkg install -y \
         tigervnc \
         websockify \
         openbox \
-        xorg-xsetroot
+        xorg-xsetroot 2>/dev/null || true
 }
 
-# Install Claude Code
-install_claude() {
-    log "Installing Claude Code..."
-    npm install -g @anthropic-ai/claude-code 2>/dev/null || {
-        warn "Claude Code npm install failed, setting up manually..."
-    }
+# Install Playwright dependencies
+install_playwright() {
+    log "Setting up Playwright for browser automation..."
+    npm install -g playwright 2>/dev/null || true
+    npx playwright install-deps 2>/dev/null || true
 }
 
 # Create directory structure
 setup_directories() {
     log "Creating directory structure..."
-    mkdir -p "$TCC_HOME"/{providers,plugins,vnc,logs,bin}
+    mkdir -p "$TCC_HOME"/{providers,plugins,vnc,logs,bin,mcp,cua}
+    mkdir -p "$HOME/workspace"
 }
 
-# Install main CLI
-install_cli() {
-    log "Installing TCC CLI..."
+# Download and install files
+install_files() {
+    log "Installing TCC files..."
     
-    cat > "$TCC_HOME/bin/tcc" << 'EOFCLI'
-#!/data/data/com.termux/files/usr/bin/bash
-#
-# TCC - Termux Coding CLI
-#
-
-TCC_HOME="$HOME/.tcc"
-source "$TCC_HOME/config.sh" 2>/dev/null || true
-source "$TCC_HOME/providers/detect.sh" 2>/dev/null || true
-
-show_help() {
-    echo "Termux-Coding-CLI v1.0.0"
-    echo ""
-    echo "Usage: tcc <command> [options]"
-    echo ""
-    echo "Commands:"
-    echo "  ai [chat] <prompt>   Use detected AI provider"
-    echo "  vnc <start|stop|status>  Manage VNC server"
-    echo "  plugin <list|install|remove> <name>  Manage plugins"
-    echo "  config               Edit configuration"
-    echo "  update               Update TCC"
-    echo "  providers            List available AI providers"
-    echo "  help                 Show this help"
-}
-
-cmd_ai() {
-    detect_provider
-    if [[ -z "$TCC_ACTIVE_PROVIDER" ]]; then
-        echo "No AI provider detected. Set one of:"
-        echo "  ANTHROPIC_API_KEY, GOOGLE_GENERATIVE_AI_API_KEY,"
-        echo "  OPENAI_API_KEY, DEEPSEEK_API_KEY, MISTRAL_API_KEY"
-        exit 1
-    fi
-    
-    echo "Using provider: $TCC_ACTIVE_PROVIDER"
-    
-    case "$TCC_ACTIVE_PROVIDER" in
-        claude)
-            if command -v claude &>/dev/null; then
-                claude "$@"
-            else
-                echo "Claude Code not installed. Run: npm i -g @anthropic-ai/claude-code"
-            fi
-            ;;
-        gemini)
-            source "$TCC_HOME/providers/gemini.sh"
-            gemini_chat "$@"
-            ;;
-        openai)
-            source "$TCC_HOME/providers/openai.sh"
-            openai_chat "$@"
-            ;;
-        deepseek)
-            source "$TCC_HOME/providers/deepseek.sh"
-            deepseek_chat "$@"
-            ;;
-        mistral)
-            source "$TCC_HOME/providers/mistral.sh"
-            mistral_chat "$@"
-            ;;
-    esac
-}
-
-cmd_vnc() {
-    source "$TCC_HOME/vnc/vnc-wss.sh"
-    case "$1" in
-        start) vnc_start ;;
-        stop) vnc_stop ;;
-        status) vnc_status ;;
-        *) echo "Usage: tcc vnc <start|stop|status>" ;;
-    esac
-}
-
-cmd_plugin() {
-    source "$TCC_HOME/plugins/manager.sh"
-    case "$1" in
-        list) plugin_list ;;
-        install) plugin_install "$2" ;;
-        remove) plugin_remove "$2" ;;
-        update) plugin_update ;;
-        *) echo "Usage: tcc plugin <list|install|remove|update> [name]" ;;
-    esac
-}
-
-cmd_providers() {
-    source "$TCC_HOME/providers/detect.sh"
-    list_providers
-}
-
-cmd_config() {
-    ${EDITOR:-nano} "$TCC_HOME/config.sh"
-}
-
-cmd_update() {
-    echo "Updating Termux-Coding-CLI..."
-    cd "$HOME/Termux-Coding-CLI" 2>/dev/null && git pull || {
-        echo "Reinstalling from remote..."
-        curl -fsSL https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/install.sh | bash
-    }
-}
-
-# Main
-case "$1" in
-    ai) shift; cmd_ai "$@" ;;
-    vnc) shift; cmd_vnc "$@" ;;
-    plugin) shift; cmd_plugin "$@" ;;
-    providers) cmd_providers ;;
-    config) cmd_config ;;
-    update) cmd_update ;;
-    help|--help|-h|"" ) show_help ;;
-    *) echo "Unknown command: $1"; show_help ;;
-esac
-EOFCLI
-
+    # Main CLI
+    curl -fsSL "$REPO_URL/bin/tcc" -o "$TCC_HOME/bin/tcc"
     chmod +x "$TCC_HOME/bin/tcc"
+    
+    # MCP Manager
+    curl -fsSL "$REPO_URL/mcp/mcp-manager.sh" -o "$TCC_HOME/mcp/mcp-manager.sh"
+    curl -fsSL "$REPO_URL/mcp/mcp-config.json" -o "$TCC_HOME/mcp/mcp-config.json"
+    
+    # CUA Agent
+    curl -fsSL "$REPO_URL/cua/cua-agent.sh" -o "$TCC_HOME/cua/cua-agent.sh"
+    
+    # Providers
+    for provider in detect gemini openai deepseek mistral; do
+        curl -fsSL "$REPO_URL/providers/${provider}.sh" -o "$TCC_HOME/providers/${provider}.sh" 2>/dev/null || true
+    done
+    
+    # VNC
+    curl -fsSL "$REPO_URL/vnc/vnc-wss.sh" -o "$TCC_HOME/vnc/vnc-wss.sh" 2>/dev/null || true
+    
+    # Plugins
+    curl -fsSL "$REPO_URL/plugins/manager.sh" -o "$TCC_HOME/plugins/manager.sh" 2>/dev/null || true
 }
 
-# Install config
+# Create config if not exists
 install_config() {
-    log "Creating configuration..."
-    
-    cat > "$TCC_HOME/config.sh" << 'EOF'
+    if [[ ! -f "$TCC_HOME/config.sh" ]]; then
+        log "Creating configuration..."
+        cat > "$TCC_HOME/config.sh" << 'EOF'
 #!/bin/bash
-# TCC Configuration
+# TCC Configuration v2.0
 
-# Default AI provider: auto|claude|gemini|openai|deepseek|mistral
+# AI Provider: auto|claude|gemini|openai|deepseek|mistral
 TCC_PROVIDER="auto"
 
 # VNC Settings
@@ -218,27 +128,32 @@ TCC_VNC_WSS_PORT=6080
 TCC_VNC_RESOLUTION="1280x720"
 TCC_VNC_DEPTH=24
 
-# Plugins to auto-load
+# MCP Settings
+TCC_MCP_AUTOSTART="playwright"
+
+# CUA Settings
+TCC_WORKSPACE="$HOME/workspace"
+
+# Plugins
 TCC_PLUGINS="core claude vnc"
 
 # Logging
 TCC_LOG_LEVEL="info"
 EOF
+    fi
 }
 
-# Install provider detection
+# Create provider detection if not exists
 install_providers() {
-    log "Setting up AI provider detection..."
-    
-    # Main detection script
-    cat > "$TCC_HOME/providers/detect.sh" << 'EOF'
+    if [[ ! -f "$TCC_HOME/providers/detect.sh" ]]; then
+        log "Setting up AI provider detection..."
+        cat > "$TCC_HOME/providers/detect.sh" << 'EOF'
 #!/bin/bash
 # AI Provider Auto-Detection
 
 detect_provider() {
     export TCC_ACTIVE_PROVIDER=""
     
-    # Check in priority order
     if [[ -n "$ANTHROPIC_API_KEY" ]]; then
         TCC_ACTIVE_PROVIDER="claude"
     elif [[ -n "$GOOGLE_GENERATIVE_AI_API_KEY" ]]; then
@@ -251,7 +166,6 @@ detect_provider() {
         TCC_ACTIVE_PROVIDER="mistral"
     fi
     
-    # Override with config if set
     if [[ "$TCC_PROVIDER" != "auto" && -n "$TCC_PROVIDER" ]]; then
         TCC_ACTIVE_PROVIDER="$TCC_PROVIDER"
     fi
@@ -278,288 +192,72 @@ list_providers() {
     echo ""
     detect_provider
     if [[ -n "$TCC_ACTIVE_PROVIDER" ]]; then
-        echo "Active provider: $TCC_ACTIVE_PROVIDER"
-    else
-        echo "No provider configured."
+        echo "Active: $TCC_ACTIVE_PROVIDER"
     fi
 }
 EOF
-
-    # Gemini provider
-    cat > "$TCC_HOME/providers/gemini.sh" << 'EOF'
-#!/bin/bash
-# Google Gemini Provider
-
-gemini_chat() {
-    local prompt="$*"
-    local model="${GEMINI_MODEL:-gemini-pro}"
+    fi
     
-    curl -s "https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GOOGLE_GENERATIVE_AI_API_KEY}" \
-        -H 'Content-Type: application/json' \
-        -d "{
-            \"contents\": [{
-                \"parts\": [{\"text\": \"$prompt\"}]
-            }]
-        }" | jq -r '.candidates[0].content.parts[0].text // .error.message'
+    # Create provider modules
+    for provider in gemini openai deepseek mistral; do
+        [[ ! -f "$TCC_HOME/providers/${provider}.sh" ]] && {
+            cat > "$TCC_HOME/providers/${provider}.sh" << EOF
+#!/bin/bash
+${provider}_chat() {
+    local prompt="\$*"
+    echo "Provider: $provider"
+    echo "Prompt: \$prompt"
+    echo "(Implement API call here)"
 }
 EOF
-
-    # OpenAI provider
-    cat > "$TCC_HOME/providers/openai.sh" << 'EOF'
-#!/bin/bash
-# OpenAI Provider
-
-openai_chat() {
-    local prompt="$*"
-    local model="${OPENAI_MODEL:-gpt-4o-mini}"
-    
-    curl -s "https://api.openai.com/v1/chat/completions" \
-        -H "Authorization: Bearer $OPENAI_API_KEY" \
-        -H 'Content-Type: application/json' \
-        -d "{
-            \"model\": \"$model\",
-            \"messages\": [{\"role\": \"user\", \"content\": \"$prompt\"}]
-        }" | jq -r '.choices[0].message.content // .error.message'
-}
-EOF
-
-    # DeepSeek provider
-    cat > "$TCC_HOME/providers/deepseek.sh" << 'EOF'
-#!/bin/bash
-# DeepSeek Provider
-
-deepseek_chat() {
-    local prompt="$*"
-    local model="${DEEPSEEK_MODEL:-deepseek-chat}"
-    
-    curl -s "https://api.deepseek.com/v1/chat/completions" \
-        -H "Authorization: Bearer $DEEPSEEK_API_KEY" \
-        -H 'Content-Type: application/json' \
-        -d "{
-            \"model\": \"$model\",
-            \"messages\": [{\"role\": \"user\", \"content\": \"$prompt\"}]
-        }" | jq -r '.choices[0].message.content // .error.message'
-}
-EOF
-
-    # Mistral provider
-    cat > "$TCC_HOME/providers/mistral.sh" << 'EOF'
-#!/bin/bash
-# Mistral Provider
-
-mistral_chat() {
-    local prompt="$*"
-    local model="${MISTRAL_MODEL:-mistral-small-latest}"
-    
-    curl -s "https://api.mistral.ai/v1/chat/completions" \
-        -H "Authorization: Bearer $MISTRAL_API_KEY" \
-        -H 'Content-Type: application/json' \
-        -d "{
-            \"model\": \"$model\",
-            \"messages\": [{\"role\": \"user\", \"content\": \"$prompt\"}]
-        }" | jq -r '.choices[0].message.content // .error.message'
-}
-EOF
+        }
+    done
 }
 
-# Install VNC with WSS
+# Setup VNC with WSS
 install_vnc_wss() {
-    log "Setting up VNC with WebSocket..."
-    
-    cat > "$TCC_HOME/vnc/vnc-wss.sh" << 'EOF'
+    if [[ ! -f "$TCC_HOME/vnc/vnc-wss.sh" ]]; then
+        log "Setting up VNC with WebSocket..."
+        cat > "$TCC_HOME/vnc/vnc-wss.sh" << 'EOFVNC'
 #!/bin/bash
-# VNC Server with WSS Support
-
 VNC_PORT="${TCC_VNC_PORT:-5901}"
 WSS_PORT="${TCC_VNC_WSS_PORT:-6080}"
 VNC_RES="${TCC_VNC_RESOLUTION:-1280x720}"
-VNC_DEPTH="${TCC_VNC_DEPTH:-24}"
 VNC_DISPLAY=":1"
 LOG_DIR="$HOME/.tcc/logs"
 
 vnc_start() {
-    echo "Starting VNC server..."
-    
-    # Kill existing
     vnc_stop 2>/dev/null
-    
-    # Create xstartup
     mkdir -p ~/.vnc
     cat > ~/.vnc/xstartup << 'XEOF'
 #!/bin/bash
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-export XKL_XMODMAP_DISABLE=1
 exec openbox-session &
 XEOF
     chmod +x ~/.vnc/xstartup
-    
-    # Start VNC
-    vncserver $VNC_DISPLAY \
-        -geometry $VNC_RES \
-        -depth $VNC_DEPTH \
-        -localhost no \
-        >> "$LOG_DIR/vnc.log" 2>&1
-    
-    # Start WebSocket proxy for WSS
+    vncserver $VNC_DISPLAY -geometry $VNC_RES -localhost no >> "$LOG_DIR/vnc.log" 2>&1
     if command -v websockify &>/dev/null; then
-        echo "Starting WebSocket proxy on port $WSS_PORT..."
-        websockify --web=/usr/share/novnc \
-            $WSS_PORT localhost:$VNC_PORT \
-            >> "$LOG_DIR/wss.log" 2>&1 &
+        websockify $WSS_PORT localhost:$VNC_PORT >> "$LOG_DIR/wss.log" 2>&1 &
         echo $! > "$LOG_DIR/wss.pid"
     fi
-    
     sleep 2
     vnc_status
 }
 
 vnc_stop() {
-    echo "Stopping VNC server..."
     vncserver -kill $VNC_DISPLAY 2>/dev/null || true
-    
-    # Stop WSS
-    if [[ -f "$LOG_DIR/wss.pid" ]]; then
-        kill $(cat "$LOG_DIR/wss.pid") 2>/dev/null || true
-        rm -f "$LOG_DIR/wss.pid"
-    fi
-    
-    pkill -f websockify 2>/dev/null || true
+    [[ -f "$LOG_DIR/wss.pid" ]] && kill $(cat "$LOG_DIR/wss.pid") 2>/dev/null
+    rm -f "$LOG_DIR/wss.pid"
     echo "VNC stopped."
 }
 
 vnc_status() {
-    echo ""
-    echo "=== VNC Server Status ==="
-    
-    if pgrep -f "Xvnc.*$VNC_DISPLAY" &>/dev/null; then
-        echo "VNC:  ✓ Running"
-        echo "  └─ Port: $VNC_PORT"
-        echo "  └─ Display: $VNC_DISPLAY"
-        echo "  └─ Resolution: $VNC_RES"
-    else
-        echo "VNC:  ✗ Not running"
+    echo "=== VNC Status ==="
+    pgrep -f "Xvnc.*$VNC_DISPLAY" &>/dev/null && echo "VNC: ✓ Running on :$VNC_PORT" || echo "VNC: ✗ Stopped"
+    pgrep -f "websockify.*$WSS_PORT" &>/dev/null && echo "WSS: ✓ Running on :$WSS_PORT" || echo "WSS: ✗ Stopped"
+}
+EOFVNC
+        chmod +x "$TCC_HOME/vnc/vnc-wss.sh"
     fi
-    
-    if pgrep -f "websockify.*$WSS_PORT" &>/dev/null; then
-        echo "WSS:  ✓ Running"
-        echo "  └─ Port: $WSS_PORT"
-        echo "  └─ URL: ws://localhost:$WSS_PORT"
-    else
-        echo "WSS:  ✗ Not running"
-    fi
-    
-    echo ""
-    echo "Connect via:"
-    echo "  VNC Client: localhost:$VNC_PORT"
-    echo "  Web Browser: http://localhost:$WSS_PORT/vnc.html"
-}
-EOF
-
-    chmod +x "$TCC_HOME/vnc/vnc-wss.sh"
-}
-
-# Install plugin manager
-install_plugin_manager() {
-    log "Setting up plugin manager..."
-    
-    cat > "$TCC_HOME/plugins/manager.sh" << 'EOF'
-#!/bin/bash
-# TCC Plugin Manager
-
-PLUGIN_DIR="$HOME/.tcc/plugins"
-PLUGIN_REPO="https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/plugins"
-
-# Available plugins
-declare -A PLUGINS=(
-    [core]="Base CLI tools|5MB"
-    [claude]="Claude Code integration|10MB"
-    [vnc]="VNC + WSS server|15MB"
-    [gui]="XFCE4 minimal desktop|20MB"
-    [dev]="Dev tools (python, git)|15MB"
-    [editors]="Nano, Vim, Micro|5MB"
-)
-
-plugin_list() {
-    echo "Available Plugins:"
-    echo ""
-    printf "%-12s %-30s %s\n" "NAME" "DESCRIPTION" "SIZE"
-    echo "─────────────────────────────────────────────────"
-    
-    for name in "${!PLUGINS[@]}"; do
-        IFS='|' read -r desc size <<< "${PLUGINS[$name]}"
-        status=""
-        [[ -f "$PLUGIN_DIR/$name.sh" ]] && status=" [installed]"
-        printf "%-12s %-30s %s%s\n" "$name" "$desc" "$size" "$status"
-    done
-}
-
-plugin_install() {
-    local name="$1"
-    [[ -z "$name" ]] && { echo "Usage: tcc plugin install <name>"; return 1; }
-    
-    if [[ -z "${PLUGINS[$name]}" ]]; then
-        echo "Unknown plugin: $name"
-        plugin_list
-        return 1
-    fi
-    
-    echo "Installing plugin: $name"
-    
-    case "$name" in
-        core)
-            pkg install -y curl wget jq git
-            ;;
-        claude)
-            npm install -g @anthropic-ai/claude-code || echo "Manual setup may be required"
-            ;;
-        vnc)
-            pkg install -y tigervnc websockify openbox xorg-xsetroot
-            ;;
-        gui)
-            pkg install -y xfce4 xfce4-terminal
-            ;;
-        dev)
-            pkg install -y python nodejs-lts git openssh
-            ;;
-        editors)
-            pkg install -y nano vim micro
-            ;;
-    esac
-    
-    touch "$PLUGIN_DIR/$name.sh"
-    echo "Plugin '$name' installed."
-}
-
-plugin_remove() {
-    local name="$1"
-    [[ -z "$name" ]] && { echo "Usage: tcc plugin remove <name>"; return 1; }
-    
-    if [[ -f "$PLUGIN_DIR/$name.sh" ]]; then
-        rm -f "$PLUGIN_DIR/$name.sh"
-        echo "Plugin '$name' removed. Note: Packages not uninstalled."
-    else
-        echo "Plugin '$name' not installed."
-    fi
-}
-
-plugin_update() {
-    echo "Updating all plugins..."
-    for plugin in "$PLUGIN_DIR"/*.sh; do
-        [[ -f "$plugin" ]] && {
-            name=$(basename "$plugin" .sh)
-            plugin_install "$name"
-        }
-    done
-    echo "All plugins updated."
-}
-EOF
-
-    chmod +x "$TCC_HOME/plugins/manager.sh"
-    
-    # Mark default plugins as installed
-    touch "$TCC_HOME/plugins/core.sh"
-    touch "$TCC_HOME/plugins/claude.sh"
 }
 
 # Setup PATH
@@ -579,42 +277,51 @@ EOF
     export PATH="$TCC_HOME/bin:$PATH"
 }
 
-# Print completion message
+# Print completion
 print_complete() {
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║   Installation Complete!               ║${NC}"
+    echo -e "${GREEN}║      Installation Complete! v$TCC_VERSION     ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════╝${NC}"
     echo ""
     echo "Quick Start:"
-    echo "  1. Set your API key:"
-    echo "     export ANTHROPIC_API_KEY=\"your-key\""
     echo ""
-    echo "  2. Start using TCC:"
-    echo "     tcc ai chat \"Hello\""
-    echo "     tcc vnc start"
-    echo "     tcc providers"
+    echo "  # Set AI key"
+    echo "  export ANTHROPIC_API_KEY=\"your-key\""
     echo ""
-    echo "  3. View help:"
-    echo "     tcc help"
+    echo "  # Use AI"
+    echo "  tcc ai chat \"Hello\""
     echo ""
-    echo -e "${YELLOW}Run 'source ~/.bashrc' or restart Termux${NC}"
+    echo "  # MCP servers"
+    echo "  tcc mcp list"
+    echo "  tcc mcp start playwright"
+    echo "  tcc mcp add-remote myserver wss://example.com/mcp"
+    echo ""
+    echo "  # Build/Ship/Preview"
+    echo "  tcc cua create react myapp"
+    echo "  tcc cua build"
+    echo "  tcc cua preview"
+    echo "  tcc cua ship github"
+    echo ""
+    echo "  # VNC"
+    echo "  tcc vnc start"
+    echo ""
+    echo -e "${YELLOW}Run: source ~/.bashrc${NC}"
 }
 
-# Main installation
+# Main
 main() {
     banner
     check_termux
     update_packages
     install_core
     setup_directories
-    install_cli
+    install_vnc
+    install_playwright
     install_config
     install_providers
-    install_vnc
     install_vnc_wss
-    install_plugin_manager
-    install_claude
+    install_files 2>/dev/null || true
     setup_path
     print_complete
 }
