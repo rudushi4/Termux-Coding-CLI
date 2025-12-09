@@ -1,6 +1,6 @@
 # 🚀 Termux-Coding-CLI
 
-**Claude Code + AI Providers on Android** - One-command installer (~50MB footprint)
+**Claude Code + AI Providers on Android** - One-command installer
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Termux](https://img.shields.io/badge/Termux-Compatible-green.svg)](https://termux.dev)
@@ -9,22 +9,20 @@
 
 - 🔌 **Pluggable AI Providers** - Auto-detect Gemini, OpenAI, DeepSeek, Mistral, Claude
 - 🖥️ **VNC + WSS Server** - Secure WebSocket access to GUI
-- 📦 **~50MB Footprint** - Alpine-based minimal setup
+- 📦 **~30MB Minimal** / ~50MB Full - Choose your setup
 - 🛠️ **Plugin System** - Extend with custom modules
 - 📱 **Termux Native** - No root required
 
 ## ⚡ Quick Install
 
+### Minimal Setup (~30MB) - Recommended
 ```bash
-curl -fsSL https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/setup-minimal.sh | bash
 ```
 
-Or step-by-step:
+### Full Setup (~50MB)
 ```bash
-pkg install git -y
-git clone https://github.com/rudushi4/Termux-Coding-CLI.git
-cd Termux-Coding-CLI
-bash install.sh
+curl -fsSL https://raw.githubusercontent.com/rudushi4/Termux-Coding-CLI/main/install.sh | bash
 ```
 
 ## 🔑 API Keys Setup
@@ -56,6 +54,9 @@ echo 'export ANTHROPIC_API_KEY="your-key"' >> ~/.bashrc
 ## 🖥️ VNC Server (with WSS)
 
 ```bash
+# Set password first
+vncpasswd
+
 # Start VNC with WebSocket Secure
 tcc vnc start
 
@@ -68,7 +69,7 @@ tcc vnc status
 
 Connect via:
 - **VNC Client**: `localhost:5901`
-- **WebSocket**: `wss://localhost:6080`
+- **WebSocket**: `ws://localhost:6080`
 
 ## 🔌 Plugin System
 
@@ -79,7 +80,8 @@ Connect via:
 | `core` | Base CLI tools | ~5MB |
 | `claude` | Claude Code integration | ~10MB |
 | `vnc` | VNC + WSS server | ~15MB |
-| `gui` | XFCE4 minimal desktop | ~20MB |
+| `gui-minimal` | Openbox minimal desktop | ~15MB |
+| `gui` | XFCE4 full desktop | ~50MB |
 | `dev` | Dev tools (git, python) | ~15MB |
 
 ### Manage Plugins
@@ -88,14 +90,14 @@ Connect via:
 # List plugins
 tcc plugin list
 
-# Install plugin
-tcc plugin install vnc
+# Install minimal GUI
+tcc plugin install gui-minimal
+
+# Install full XFCE
+tcc plugin install gui
 
 # Remove plugin
 tcc plugin remove gui
-
-# Update all
-tcc plugin update
 ```
 
 ## 🛠️ Commands
@@ -106,8 +108,9 @@ tcc ai                 # Detect & use AI provider
 tcc ai chat "prompt"   # Quick AI query
 tcc vnc start          # Start VNC/WSS
 tcc plugin <cmd>       # Plugin management
+tcc providers          # List AI providers
 tcc config             # Edit configuration
-tcc update             # Update Termux-Coding-CLI
+tcc update             # Update TCC
 ```
 
 ## 📁 Structure
@@ -120,6 +123,15 @@ tcc update             # Update Termux-Coding-CLI
 ├── vnc/               # VNC configuration
 └── logs/              # Runtime logs
 ```
+
+## 🎨 Desktop Styles
+
+Based on [termux-desktop](https://github.com/sabamdarif/termux-desktop) Minimalist Setup 2:
+
+- **Theme**: Otis GTK
+- **Icons**: Deepin2022
+- **Cursor**: Layan
+- **WM**: Openbox (minimal) or XFCE4 (full)
 
 ## 🔧 Configuration
 
@@ -142,7 +154,7 @@ TCC_PLUGINS="core claude vnc"
 
 - Android 7.0+
 - Termux (F-Droid version recommended)
-- ~50MB storage
+- ~30MB storage (minimal) / ~50MB (full)
 - Internet connection for AI APIs
 
 ## 🤝 Contributing
